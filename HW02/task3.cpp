@@ -68,6 +68,8 @@ int main(){
   cout << duration_sec.count() << "\n";
   cout << C[n*n-1] << "\n";
 
+  delete [] A;
+  delete [] B;
   delete [] C;
 
   return 0;
