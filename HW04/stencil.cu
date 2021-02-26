@@ -31,18 +31,21 @@ __global__ void stencil_kernel(const float* image, const float* mask, float* out
             sharedArray[blockDim.x + threadIdx.x] = mask[threadIdx.x];
         }
 
-        sharedArray[blockDim.x + maskSize + threadIdx.x] = 0.0;					
+        sharedArray[outputIndex] = 0.0;					
         __syncthreads();
 
         // conv
-        for (int k = 0; k < 2*R+1; k++) {
+        //float outputSub = 0.0;
+        for (int k = 0; k < maskSize; k++) {
             int imageIndex = index - R + k;   
             if (imageIndex >= imageIdxL && imageIndex < imageIdxR) {
                 sharedArray[outputIndex] += sharedArray[threadIdx.x + k - R] * sharedArray[blockDim.x + k];
+                //outputSub += sharedArray[threadIdx.x + k - R] * sharedArray[blockDim.x + k];
             }
             else
             {
                 sharedArray[outputIndex] += sharedArray[blockDim.x + k];
+                //outputSub += sharedArray[blockDim.x + k];
             }              
             
         }
@@ -50,6 +53,7 @@ __global__ void stencil_kernel(const float* image, const float* mask, float* out
                 
         // move output to global mem
         output[index] = sharedArray[outputIndex];
+        // output[index] = outputSub;
     }
 	
 }
