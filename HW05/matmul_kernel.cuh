@@ -31,7 +31,7 @@ __global__ void matmul_kernel(const T* A, const T* B, T* C, unsigned int n) {
 	int bBegin = blockDim.y * blockIdx.x;
 	int bStep = blockDim.y * n;
 
-	float Csub = 0;
+	T Csub = 0;
 	
 	// grab tiles As and Bs from global to shared mem
 	for (int a = aBegin, b = bBegin; a <= aEnd; a += aStep, b += bStep) {

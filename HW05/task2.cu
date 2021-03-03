@@ -16,7 +16,7 @@ int main(int argc, char* argv[])
     std::istringstream input_1(argv[1]);
     std::istringstream input_2(argv[2]);
     if (input_1 >> n && input_2>>block_dim && input_2.eof()) {
-                //create arrays on managed mem
+        //create arrays on managed mem
         int* A, * B, * C;
         cudaMallocManaged(&A, sizeof(int) * n * n);
         cudaMallocManaged(&B, sizeof(int) * n * n);
