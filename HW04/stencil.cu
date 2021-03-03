@@ -26,13 +26,14 @@ __global__ void stencil_kernel(const float* image, const float* mask, float* out
 	int index = threadIdx.x + blockIdx.x * blockDim.x;
 	int index_padded = threadIdx.x + R;
 	int outputIndex = blockDim.x + 2*R + maskSize + threadIdx.x;
+	extern __shared__ float sharedArray[];
 
 	if (index < n) {
 		// sharedArray contains
 		// - The entire mask
 		// - The elements of image needed: KEY!! it's 2R + num_threads
 		// - The output image elements corresponding to the given block before it is written back to global memory
-		extern __shared__ float sharedArray[];
+		
 
 		// load tiles from global mem to shared mem
 		sharedArray[index_padded] = image[index];
@@ -64,7 +65,7 @@ __global__ void stencil_kernel(const float* image, const float* mask, float* out
 		for (int k = -R; k < int(R+1); k++) {
 			sharedArray[outputIndex] += sharedArray[index_padded + k] * sharedArray[blockDim.x + 3 * R + k];
 		}
-		__syncthreads();
+		//__syncthreads();
 
 
 		// move output to global mem
