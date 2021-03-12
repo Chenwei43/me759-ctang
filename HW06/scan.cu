@@ -10,15 +10,17 @@
 #include "scan.cuh"
 
 
-__global__ void hillis_steele_blocks(float* g_odata, const float* g_idata, float *eob) {
-    /* **inclusive** scan of each block */
+__global__ void hillis_steele_blocks(float* g_odata, const float* g_idata, float *eob, unsigned int len_input) {
+    /* **inclusive** scan
+    * n is total length of the array to be scanned
+    * */
 
     extern volatile __shared__  float temp[]; // allocated on invocation
+    
+    unsigned int idxFull = threadIdx.x + blockIdx.x * blockDim.x;
 
-    int thid = threadIdx.x;
-    int idxFull = threadIdx.x + blockIdx.x * blockDim.x;
-
-
+    if (idxFull < len_input) {
+        unsigned int thid = threadIdx.x;
         int pout = 0, pin = 1;
 
         // load input into shared memory. when overshoot, write 0s. 
@@ -30,28 +32,27 @@ __global__ void hillis_steele_blocks(float* g_odata, const float* g_idata, float
             pin = 1 - pout;
 
             if (thid >= offset)
+            {
                 temp[pout * blockDim.x + thid] = temp[pin * blockDim.x + thid] + temp[pin * blockDim.x + thid - offset];
+            }
             else
+            {
                 temp[pout * blockDim.x + thid] = temp[pin * blockDim.x + thid];
-
+            }
             __syncthreads(); // I need this here before I start next iteration 
         }
 
         // crop the padded
-            g_odata[idxFull] = temp[pout * blockDim.x + thid];
-    
+        g_odata[idxFull] = temp[pout * blockDim.x + thid];
+
         __syncthreads();
 
-        eob[blockIdx.x] = g_odata[blockDim.x * (1+blockIdx.x)-1];
-    
-    
+        eob[blockIdx.x] = g_odata[blockDim.x * (1 + blockIdx.x) - 1];
+
+    }
 }
 
 __global__ void hillis_steele_eob(float* g_odata, const float* g_idata, unsigned int n) {
-    /* **inclusive** scan of array consists of last entries of each block 
-        Under the assumption that length of input <= threads_per_block**2, this can be done safely by 1 block.
-    */
-
     extern volatile __shared__  float temp[]; // allocated on invocation
 
     int thid = threadIdx.x;
@@ -78,7 +79,7 @@ __global__ void hillis_steele_eob(float* g_odata, const float* g_idata, unsigned
     g_odata[thid] = temp[pout * blockDim.x + thid];
 }
 
-/* add scanned eob to individually scanned blocks -> final results */
+
 __global__ void add_eob(float* g_odata, float* eob, unsigned int threads_per_block, unsigned int numBlocks) {
 
     if (blockIdx.x < (numBlocks - 1)) {
@@ -87,7 +88,6 @@ __global__ void add_eob(float* g_odata, float* eob, unsigned int threads_per_blo
 
 }
 
-/* Added last entry of scanned eob to entries of residual block*/
 __global__ void add_lastFull(float* g_odata, float* eob, unsigned int num_fullBlocks) {
 
     g_odata[threadIdx.x] += eob[num_fullBlocks-1];    
@@ -95,11 +95,19 @@ __global__ void add_lastFull(float* g_odata, float* eob, unsigned int num_fullBl
 }
 
 
+
+// Performs an *inclusive scan* on the array input and writes the results to the array output.
+// The scan should be computed by making calls to your kernel hillis_steele with
+// threads_per_block threads per block in a 1D configuration.
+// input and output are arrays of length n allocated as managed memory.
+//
+// Assumptions:
+// - n <= threads_per_block * threads_per_block
 __host__ void scan(const float* input, float* output, unsigned int n, unsigned int threads_per_block) {
 
     
     unsigned int num_entries_last_block = n % threads_per_block;
-    if (num_entries_last_block == 0) {
+    if (n < threads_per_block | num_entries_last_block == 0) {
 
         //scan each block
         unsigned int numBlocks = (n + threads_per_block - 1) / threads_per_block;
@@ -108,16 +116,25 @@ __host__ void scan(const float* input, float* output, unsigned int n, unsigned i
         cudaMalloc((void**)&end_of_block, numBlocks * sizeof(float));
         cudaMalloc((void**)&end_of_block_scanned, numBlocks * sizeof(float));
 
-        hillis_steele_blocks<<<numBlocks, threads_per_block, 2 * threads_per_block * sizeof(float)>>> (output, input, end_of_block);
+        
 
-        //scan array composed of the last entries of each block
-        //under the assumption, it can be done with a single block
-        // unsigned int numBlocks_scanBlock = (numBlocks + threads_per_block - 1) / (2 * threads_per_block);
-        hillis_steele_eob<<<1, numBlocks, 2 * numBlocks * sizeof(float)>>>(end_of_block_scanned, end_of_block, numBlocks);
+        if (n > threads_per_block) {
+            hillis_steele_blocks <<<numBlocks, threads_per_block, 2 * threads_per_block * sizeof(float) >>> (output, input, end_of_block, n);
+
+            //scan array composed of the last entries of each block
+            //under the assumption, it can be done with a single block
+            // unsigned int numBlocks_scanBlock = (numBlocks + threads_per_block - 1) / (2 * threads_per_block);
+            hillis_steele_eob<<<1, numBlocks, 2 * numBlocks * sizeof(float)>>>(end_of_block_scanned, end_of_block, numBlocks);
 
 
-        //Add end of each block to corresponding entries
-        add_eob<<<numBlocks, threads_per_block >>>(output, end_of_block_scanned, threads_per_block, numBlocks);
+            //Add end of each block to corresponding entries
+            add_eob<<<numBlocks, threads_per_block >>>(output, end_of_block_scanned, threads_per_block, numBlocks);
+        }
+        else {
+            hillis_steele_blocks <<<numBlocks, n, 2 * n* sizeof(float) >>> (output, input, end_of_block, n);
+        }
+
+        
 
 
         cudaFree(end_of_block);
@@ -132,7 +149,7 @@ __host__ void scan(const float* input, float* output, unsigned int n, unsigned i
         float* end_of_block, * end_of_block_scanned;
         cudaMalloc((void**)&end_of_block, num_fullBlocks * sizeof(float));
         cudaMalloc((void**)&end_of_block_scanned, num_fullBlocks * sizeof(float));
-        hillis_steele_blocks<<<num_fullBlocks, threads_per_block, 2 * threads_per_block * sizeof(float)>>>(output, input, end_of_block);
+        hillis_steele_blocks<<<num_fullBlocks, threads_per_block, 2 * threads_per_block * sizeof(float)>>>(output, input, end_of_block, real_n);
         hillis_steele_eob<<<1, num_fullBlocks, 2 * num_fullBlocks * sizeof(float)>>>(end_of_block_scanned, end_of_block, num_fullBlocks);
         add_eob<<<num_fullBlocks, threads_per_block>>>(output, end_of_block_scanned, threads_per_block, num_fullBlocks);
 
