@@ -25,7 +25,7 @@ int main(int argc, char* argv[]) {
 
     std::random_device entropy_source;
     std::mt19937 generator(entropy_source()); 
-    std::uniform_int_distribution<int> dist(0, n);
+    std::uniform_real_distribution<float> dist(0, n);
     for (size_t j = 0; j < n; j++) {
         buffer1[j] = dist(generator);
         buffer2[j] = dist(generator);
