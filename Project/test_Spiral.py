@@ -9,6 +9,7 @@ import sigpy.mri
 from gradient_system import *
 from scan_prescription import *
 from calcBc import getBcSpiral
+from dft_offres_ops import *
 
 device = sp.Device(0)
 xp = device.xp
@@ -57,7 +58,7 @@ plt.show()
 # plt.imshow(sp.to_device(kcoords_cart[:,:,0], sp.cpu_device))
 # plt.show()
 reso = 1/(2*np.sqrt(kcoords[-1,0,0]**2 + kcoords[-1,0,1]**2))   # in m
-[x, y] = xp.meshgrid(xp.linspace(-0.5,0.5,128),xp.linspace(-0.5,0.5,128))
+[x, y] = xp.meshgrid(xp.linspace(-0.5,0.5,256),xp.linspace(-0.5,0.5,256))
 
 
 affine = np.identity(3)
@@ -96,27 +97,35 @@ sl_angles = [[0, 0, 0],
              [0, 0, 0]]
 water = sp.sim.phantom([256,256], sl_amps, sl_scales, sl_offsets, sl_angles,dtype=np.complex64)
 water = np.flipud(water)
-plt.imshow(np.abs(water), cmap='gray')
+water = sp.backend.to_device(water,device)
+plt.imshow(np.abs(water.get()), cmap='gray')
 plt.show()
 
 # for sl in range(Nslice):
 sl=0
 s = xp.zeros(kcoords.shape[0], xp.complex64)
+imPreSum = xp.zeros(water.shape+(kcoords.shape[0],), xp.complex64)
 imEst = xp.zeros(water.shape, xp.complex64)
+
+fr = 0.9 * Nfreq / 2.0
+fw = 0.1 * Nfreq / 2.0
+wx = weights_kernel(kcoords[:, sl, 0], fr, fw)
+wy = weights_kernel(kcoords[:, sl, 0], fr, fw)
+
+# Gphase = xp.zeros((256, 256, kcoords.shape[0]), dtype='complex64')
+# calc_Gphase_kernel((1,),(1024,), (kx, ky, x, y, 1j, Gphase))
+# Gphase = xp.exp(1j*2.0*math.pi*Gphase)
+# Ophase = xp.zeros((256, 256,  kcoords.shape[0]), dtype='complex64')
+# calc_Ophase_kernel((1,), (1024,), (t, offmap, fmax, 1j, Ophase))
+# Ophase = xp.exp(1j * 2.0 * math.pi * Ophase)
 for pos in range(gradients.shape[0]):
     # sampling
-    Gphase = xp.exp(1j * 2.0 * math.pi * (kcoords[pos, sl, 0] * x + kcoords[pos, sl, 1]* y))
+    Gphase = xp.exp(1j * 2.0 * math.pi * (kcoords[pos, sl, 0] * x + kcoords[pos, sl, 1] * y))
     Ophase = xp.exp(1j * offmap[:,:,pos] )
-    s[pos] = xp.sum(water * Gphase * Ophase)
+    s[pos] = acq_kernel(Gphase, Ophase, water)
 
     # DFT recon
-    fr = 0.9 * Nfreq / 2.0
-    fw = 0.1 * Nfreq / 2.0
-
-    kr = xp.abs(kcoords[pos, sl, 0])
-    wx = 1. / (1. + xp.exp((kr - fr) / fw))
-    kr = xp.abs(kcoords[pos, sl, 1])
-    wy = 1. / (1. + xp.exp((kr - fr) / fw))
-    imEst += s[pos] * xp.conj(Gphase) * xp.conj(Ophase) * wx * wy
+    imPreSum[:,:,pos] = recon_kernel(xp.conj(Gphase), xp.conj(Ophase), s[pos], wx[pos], wy[pos])
+imEst = xp.sum(imPreSum, axis=2)
 
 
