@@ -29,12 +29,12 @@ t_offset = 0.0
 # grid_res = (39,39, 1)
 # fov_z = Nslice * (sliceThick+sliceSpacing)
 
-# Create gradients
-# TODO write up vds
+# TODO: Create gradients
 import scipy.io
 g = scipy.io.loadmat('g.mat')
 gradients = g['g'] * 1e-2   # in T/m
-plt.plot(gradients[:,0])
+gradients = xp.array(gradients, dtype='float32')
+plt.plot(gradients[:,0].get())
 plt.show()
 
 t = np.arange(0,gradients.shape[0]*Tres, Tres)
@@ -43,6 +43,7 @@ k = scipy.io.loadmat('k.mat')
 temp = k['k']* 1e2   # in m-1
 kcoords = np.stack((np.real(temp), np.imag(temp)))
 kcoords = kcoords[...,:Npe*Nfreq]
+kcoords = kcoords.astype('float32')
 # kz= np.linspace(-fov_z/2, fov_z/2, Nslice)
 # kcoords = np.tile(kcoords,(1,Nslice, 1))
 
@@ -53,18 +54,17 @@ ones = xp.ones(kcoords.shape[:-1]+(1,))
 plt.scatter(kcoords[:100,0,0].get(),kcoords[:100,0,1].get())
 plt.show()
 
-# TODO: how to get image domain coords
 # kcoords_cart = sp.gridding(ones, kcoords, grid_res)
 # plt.imshow(sp.to_device(kcoords_cart[:,:,0], sp.cpu_device))
 # plt.show()
 reso = 1/(2*np.sqrt(kcoords[-1,0,0]**2 + kcoords[-1,0,1]**2))   # in m
-[x, y] = xp.meshgrid(xp.linspace(-0.5,0.5,256),xp.linspace(-0.5,0.5,256))
+[x, y] = xp.meshgrid(xp.linspace(-0.5,0.5,256, dtype='float32'),xp.linspace(-0.5,0.5,256, dtype='float32'))
 
 
-affine = np.identity(3)
-z = xp.zeros(x.shape, x.dtype)
+affine = np.identity(3, dtype='float32').flatten() * .3   # scale to meters
+z = xp.ones(x.shape, x.dtype) * 1
 Bc = getBcSpiral(gradients[:,0], gradients[:,1], x, y, z, affine, B0=3)
-offmap = gamma * np.cumsum(Bc) * Tres   #(xres,yres,npts)
+offmap = gamma * np.cumsum(Bc, axis=-1) * Tres   #(xres,yres,npts)
 
 # phantom
 sl_amps = [0.2, 1., 1.2, 1.1, 1.1, 1.1, 1.1, 1.1, 1.1]
@@ -118,7 +118,7 @@ wy = weights_kernel(kcoords[:, sl, 0], fr, fw)
 # Ophase = xp.zeros((256, 256,  kcoords.shape[0]), dtype='complex64')
 # calc_Ophase_kernel((1,), (1024,), (t, offmap, fmax, 1j, Ophase))
 # Ophase = xp.exp(1j * 2.0 * math.pi * Ophase)
-for pos in range(gradients.shape[0]):
+for pos in range(Npe * Nfreq):
     # sampling
     Gphase = xp.exp(1j * 2.0 * math.pi * (kcoords[pos, sl, 0] * x + kcoords[pos, sl, 1] * y))
     Ophase = xp.exp(1j * offmap[:,:,pos] )
