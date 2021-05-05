@@ -45,7 +45,7 @@ t_offset = 0.0
 # kcoords = kcoords[...,:Npe*Nfreq]
 # kcoords = kcoords.astype('float32')
 
-Tread = 30.0*1e-3
+Tread = 0.494
 t = np.linspace(0, Tread,Nfreq*Nfreq)
 t = t.astype('float32')
 tt = np.sqrt(t/Tread)
@@ -63,7 +63,7 @@ kcoords = kcoords[None, ...]
 kcoords = sp.to_device(np.transpose(kcoords,(-1,0,1)), device)   #(npts, nslice,ndim)
 
 k=kx+1j*ky
-g = 1/gamma*(k-xp.concatenate((k[1:],xp.zeros(1,'complex64'))))/Tres;
+g = 1/gammabar*(k-xp.concatenate((k[1:],xp.zeros(1,'complex64'))))/Tres;
 gradients = np.stack((xp.real(g), xp.imag(g)), axis=-1)
 plt.plot(np.abs(g[:200].get()))
 plt.show()
@@ -83,7 +83,7 @@ reso = 1/(2*np.sqrt(kcoords[-1,0,0]**2 + kcoords[-1,0,1]**2))   # in m
 affine = np.identity(3, dtype='float32').flatten() * .3   # scale to meters
 z = xp.ones(x.shape, x.dtype) * 1
 Bc = getBcSpiral(gradients[:,0], gradients[:,1], x, y, z, affine, B0=3)
-offmap = gamma * np.cumsum(Bc, axis=-1) * Tres   #(xres,yres,npts)
+offmap = gamma * np.cumsum(Bc, axis=-1) * Tread/(Nfreq**2)   #(xres,yres,npts)
 
 # phantom
 sl_amps = [0.2, 1., 1.2, 1.1, 1.1, 1.1, 1.1, 1.1, 1.1]
