@@ -20,8 +20,8 @@ scan = ScanPrescription()
 gammabar = 42.58e6 # Hz/T
 gamma = 2.6752e8    #rad/(s*T)
 Tres = 4e-6 #s
-Npe = 39
-Nfreq = 39
+Npe = 110
+Nfreq = 110
 t_offset = 0.0
 # Nslice = 1
 # sliceThick = 4e-3   # in m
@@ -29,29 +29,48 @@ t_offset = 0.0
 # grid_res = (39,39, 1)
 # fov_z = Nslice * (sliceThick+sliceSpacing)
 
-# TODO: Create gradients
-import scipy.io
-g = scipy.io.loadmat('g.mat')
-gradients = g['g'] * 1e-2   # in T/m
-gradients = xp.array(gradients, dtype='float32')
-plt.plot(gradients[:,0].get())
+# TODO: calc dcf for vds spiral
+# import scipy.io
+# g = scipy.io.loadmat('g.mat')
+# gradients = g['g'] * 1e-2   # in T/m
+# gradients = xp.array(gradients, dtype='float32')
+# plt.plot(gradients[:,0].get())
+# plt.show()
+#
+# t = np.arange(0,gradients.shape[0]*Tres, Tres)
+
+# k = scipy.io.loadmat('k.mat')
+# temp = k['k']* 1e2   # in m-1
+# kcoords = np.stack((np.real(temp), np.imag(temp)))
+# kcoords = kcoords[...,:Npe*Nfreq]
+# kcoords = kcoords.astype('float32')
+
+Tread = 30.0*1e-3
+t = np.linspace(0, Tread,Nfreq*Nfreq)
+t = t.astype('float32')
+tt = np.sqrt(t/Tread)
+kx = Nfreq/2*tt*np.cos( 2*math.pi*Nfreq/2*tt)
+kx =kx.astype('float32')
+ky = Nfreq/2*tt*np.sin( 2*math.pi*Nfreq/2*tt)
+ky =ky.astype('float32')
+
+#kx,ky = -ky,kx
+ky = -ky
+kx = xp.array(kx)
+ky=xp.array(ky)
+kcoords = xp.stack((kx,ky))
+kcoords = kcoords[None, ...]
+kcoords = sp.to_device(np.transpose(kcoords,(-1,0,1)), device)   #(npts, nslice,ndim)
+
+k=kx+1j*ky
+g = 1/gamma*(k-xp.concatenate((k[1:],xp.zeros(1,'complex64'))))/Tres;
+gradients = np.stack((xp.real(g), xp.imag(g)), axis=-1)
+plt.plot(np.abs(g[:200].get()))
 plt.show()
 
-t = np.arange(0,gradients.shape[0]*Tres, Tres)
-
-k = scipy.io.loadmat('k.mat')
-temp = k['k']* 1e2   # in m-1
-kcoords = np.stack((np.real(temp), np.imag(temp)))
-kcoords = kcoords[...,:Npe*Nfreq]
-kcoords = kcoords.astype('float32')
-# kz= np.linspace(-fov_z/2, fov_z/2, Nslice)
-# kcoords = np.tile(kcoords,(1,Nslice, 1))
-
-# kz = np.tile(kz, (kcoords.shape[0],1,1))
-# kcoords = np.concatenate((kcoords,kz), axis=1)
-kcoords = sp.to_device(np.transpose(kcoords,(-1,1,0)), device)   #(npts, nslice,ndim)
+#kcoords = sp.to_device(np.transpose(kcoords,(-1,1,0)), device)   #(npts, nslice,ndim)
 ones = xp.ones(kcoords.shape[:-1]+(1,))
-plt.scatter(kcoords[:100,0,0].get(),kcoords[:100,0,1].get())
+plt.scatter(kcoords[:200,0,0].get(),kcoords[:200,0,1].get())
 plt.show()
 
 # kcoords_cart = sp.gridding(ones, kcoords, grid_res)
@@ -107,10 +126,16 @@ s = xp.zeros(kcoords.shape[0], xp.complex64)
 imPreSum = xp.zeros(water.shape+(kcoords.shape[0],), xp.complex64)
 imEst = xp.zeros(water.shape, xp.complex64)
 
+imPreSum2 = xp.zeros(water.shape+(kcoords.shape[0],), xp.complex64)
+imEst2 = xp.zeros(water.shape, xp.complex64)
+
 fr = 0.9 * Nfreq / 2.0
 fw = 0.1 * Nfreq / 2.0
 wx = weights_kernel(kcoords[:, sl, 0], fr, fw)
 wy = weights_kernel(kcoords[:, sl, 0], fr, fw)
+# wx = xp.ones(Npe * Nfreq, xp.float32)
+# wy = xp.ones(Npe * Nfreq, xp.float32)
+
 
 # Gphase = xp.zeros((256, 256, kcoords.shape[0]), dtype='complex64')
 # calc_Gphase_kernel((1,),(1024,), (kx, ky, x, y, 1j, Gphase))
@@ -125,7 +150,34 @@ for pos in range(Npe * Nfreq):
     s[pos] = acq_kernel(Gphase, Ophase, water)
 
     # DFT recon
+    ignoreOphase = xp.ones(Gphase.shape, Gphase.dtype)
     imPreSum[:,:,pos] = recon_kernel(xp.conj(Gphase), xp.conj(Ophase), s[pos], wx[pos], wy[pos])
+    imPreSum2[:, :, pos] = recon_kernel(xp.conj(Gphase), xp.conj(ignoreOphase), s[pos], wx[pos], wy[pos])
 imEst = xp.sum(imPreSum, axis=2)
+imEst2 = xp.sum(imPreSum2, axis=2)
+plt.figure()
+plt.imshow(np.abs(imEst.get()-imEst2.get()), cmap='gray')
+plt.colorbar()
+plt.axis('off')
+plt.title('Difference')
+plt.show()
 
-
+fig = plt.figure(figsize=(12,3))
+ax1 = plt.subplot(141)
+ax2 = plt.subplot(142)
+ax3 = plt.subplot(143)
+ax4 = plt.subplot(144)
+ax1.set_title("With correction")
+ax1.imshow(np.abs(imEst.get()), cmap='gray')
+ax1.axis('off')
+ax2.set_title("without correction")
+ax2.imshow(np.abs(imEst2.get()), cmap='gray')
+ax2.axis('off')
+ax3.set_title("Difference")
+ax3.imshow(np.abs(imEst.get()-imEst2.get()), cmap='gray')
+ax3.axis('off')
+ax4.set_title("Truth")
+ax4.imshow(np.abs(water.get()), cmap='gray')
+ax4.axis('off')
+plt.show()
+fig.savefig(r'D:\Courses\ME759\me759-ctang\Project\phantom_simpleSpiral.png')
