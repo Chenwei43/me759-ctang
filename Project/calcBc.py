@@ -30,7 +30,7 @@ def getBcSpiral(gx, gy, x,y,z, affine, B0=.3):
         + affine[6] * affine[8] * (2 * affine[0] ** 2 + affine[1] ** 2 + 2 * affine[3] ** 2 + affine[4] ** 2) \
         - affine[6] * affine[7] * (affine[1]*affine[2]+affine[4]*affine[5]) \
         - affine[7] * affine[8] * (affine[0]*affine[1]+affine[3]*affine[4])
-    f6 = -.5 * (affine[0]*affine[1] + affine[3]*affine[4]) * (affine[6]**+affine[7]**2) \
+    f6 = -.5 * (affine[0]*affine[1] + affine[3]*affine[4]) * (affine[6]**2+affine[7]**2) \
         + affine[6] * affine[7] * (affine[0]**2 + affine[1]**2 + affine[3]**2 + affine[4]**2)
 
 
