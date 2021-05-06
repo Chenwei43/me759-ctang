@@ -17,7 +17,7 @@
 int main()
 {   
     //const unsigned int nproj = 9990;
-    const unsigned int B0 = 3;
+    const float B0 = .3;
     const unsigned int Npe = 110;
     const unsigned int Nfreq = 110;
     const unsigned int Npts = Npe * Nfreq;
@@ -82,7 +82,10 @@ int main()
     cudaMalloc((void**)&affine_cu, sizeof(float) * 9);
     cudaMemcpy(affine_cu, &affine, sizeof(float) * 9, cudaMemcpyHostToDevice);
 
-
+    // Phi_c(xres, yres, t)
+    float* Phi_c;
+    cudaMallocManaged(&Phi_c, sizeof(float) * res * res * Npts);
+    getBc_spiral(gx, gy, x, y, z, tres, B0, affine, Phi_c);
 
     for (unsigned int i = 0; i < Npts; i++) {
 

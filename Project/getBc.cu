@@ -17,7 +17,7 @@
 
 void getBc_spiral(const thrust::device_vector<float>& gx, const thrust::device_vector<float>& gy,
     const thrust::device_vector<float>& x, const thrust::device_vector<float>& y, const thrust::device_vector<float>& z,
-    const float dt, const float B0, const thrust::device_vector<float>& affine, thrust::device_vector<float>& phi_c)
+    const float dt, const float B0, const thrust::device_vector<float>& affine, float* Bc) 
 {
 //unsigned int idxFull = threadIdx.x + blockIdx.x * blockDim.x;
 thrust::device_vector<float> gx2(gx.size());
@@ -75,8 +75,7 @@ thrust::transform(spatial.begin(), spatial.end(), yz.begin(), spatial, thrust::p
 thrust::transform(spatial.begin(), spatial.end(), xy.begin(), spatial, thrust::plus<float>());
 
 //Bc
-float* Bc;
-cudaMallocManaged(&Bc, sizeof(float) * x.size() * y.size() * gx.size());
+
 float* ptrSpatial = thrust::raw_pointer_cast(&spatial[0]);
 
 for (unsigned int ii = 0; ii < gx.size(); ii++) {
@@ -84,9 +83,22 @@ thrust::device_vector<float> grad(x.size()*y.size());
 thrust::fill(grad.begin(), grad.end(), g[ii]);
 thrust::transform(spatial.begin(), spatial.end(), grad.begin(), Bc+ii*(x.size() * y.size()), thrust::multiplies<float>());
 }
+thrust::device_ptr<double> Bc_ptr = thrust::device_pointer_cast(Bc);
+// Phi(res, res, t) = gamma_bar* scan(Bc*dT, axis=t)
+// there's no such nice thing as axis, so need to permute and get res*res arrays of shape (npts,), each array is a time evolution of a pixel, scan those (res*res kernels), then permute back
+thrust::device_vector<int> map(gx.size());
+for (unsigned int jj = 0; jj < x.size() * y.size(); jj++) {
+for (unsigned int ii = 0; ii < gx.size(); ii++) {        
 
-// Phi(t) = gamma_bar* scan(Bc*dT)
+map[ii] = ii * x.size() * y.size()+jj;
+}
+thrust::inclusive_scan(thrust::make_permutation_iterator(Bc_ptr, map.begin()),
+thrust::make_permutation_iterator(Bc_ptr, map.begin()),
+Bc_ptr);
+}
 
-
+// Bc <- Bc_ptr. After scan and scaling, Bc is Phi_c
+float scale = GAMMA / (4 * B0) * dt;
+cublasSscal(handle, x.size() * y.size() * gx.size(), &scale, Bc, 1);
 
 }
