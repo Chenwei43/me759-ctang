@@ -1,6 +1,6 @@
 import numpy as np
 
-def getBcSpiral(gx, gy, x,y,z, affine, B0=.3):
+def getBcSpiral(gx, gy, x,y,z, affine, B0=3):
     """
     concomitant field calc for spiral
     Based on MRM 66:390–401 (2011) DOI 10.1002/mrm.22802

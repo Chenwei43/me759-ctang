@@ -78,27 +78,28 @@ int main()
 
     //transform matrix to physical coords
     float affine[9] = {.3, 0, 0, 0, .3, 0, 0, 0, .3};
-    float* affine_cu;
-    cudaMalloc((void**)&affine_cu, sizeof(float) * 9);
-    cudaMemcpy(affine_cu, &affine, sizeof(float) * 9, cudaMemcpyHostToDevice);
-
+    thrust::device_vector<float> affine_vec(affine, affine+9);
+   
     // Phi_c(xres, yres, t)
     float* Phi_c;
     cudaMallocManaged(&Phi_c, sizeof(float) * res * res * Npts);
-    getBc_spiral(gx, gy, x, y, z, tres, B0, affine, Phi_c);
+    thrust::device_vector<float> gx_vec(gx, gx + Npts);
+    thrust::device_vector<float> gy_vec(gy, gy + Npts);
+    thrust::device_vector<float> x_vec(x, x + res * res);
+    thrust::device_vector<float> y_vec(y, y + res * res);
+    thrust::device_vector<float> z_vec(z, z + res * res);   
+    getBc_spiral(gx_vec, gy_vec, x_vec, y_vec, z_vec, tres, B0, affine_vec, Phi_c);     //Phi_c is float*
 
+    float* Gphase, * Ophase;
+    cudaMallocManaged(&Gphase, sizeof(float) * res * res);
+    cudaMallocManaged(&Ophase, sizeof(float) * res * res);
     for (unsigned int i = 0; i < Npts; i++) {
 
         // acquisition
-
+        
 
         // recon
 
 
     }
     
-
-
-    return 0;
-}
-
