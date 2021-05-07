@@ -4,6 +4,7 @@
 #include <fstream>
 #include <sstream>
 #include <math.h>
+#include <complex.h>
 #include <random>
 
 #include "cuda_runtime.h"
@@ -90,16 +91,40 @@ int main()
     thrust::device_vector<float> z_vec(z, z + res * res);   
     getBc_spiral(gx_vec, gy_vec, x_vec, y_vec, z_vec, tres, B0, affine_vec, Phi_c);     //Phi_c is float*
 
-    float* Gphase, * Ophase;
-    cudaMallocManaged(&Gphase, sizeof(float) * res * res);
-    cudaMallocManaged(&Ophase, sizeof(float) * res * res);
+    double complex* Gphase;
+    double complex* Ophase;
+    cudaMallocManaged(&Gphase, sizeof(double) * res * res);
+    cudaMallocManaged(&Ophase, sizeof(double) * res * res);
+
+    double complex* im_presum;
+    cudaMallocManaged(&Gphase, sizeof(double) *Npts* res * res);
+
+    float* water_h = new float[res * res]();
+    thrust::device_vector<float> water(res * res);
+    thrust::copy(water.begin(), water.end(), water_h);
     for (unsigned int i = 0; i < Npts; i++) {
 
         // acquisition
-        
+        for (unsigned int j = 0; j < res * res; j++) {
+            Gphase[j] = exp(I * 2.f * PI * kx[i] * x[j] + ky[i] * y[j]);
+            Ophase[j] = exp(I * Phi_c[j + i * res * res]);           
+        }
+        cublasHandle_t handle;
+        cublasCreate(&handle);
+        const float alphaValue = 1.0, betaValue = 1.0;
+        const float complex* alpha = &alphaValue;
+        const float complex* beta = &betaValue;
+        cublasCgemm(handle, CUBLAS_OP_N, CUBLAS_OP_N, res, res, res, alpha, Ophase, res, GPhase, res, beta, Gphase, res);
+        cublasCgemm(handle, CUBLAS_OP_N, CUBLAS_OP_N, res, res, res, alpha, water, res, GPhase, res, beta, water, res););
+        s[i] = thrust::reduce(water.begin(), water.end());
 
-        // recon
+        cublasCgemm(handle, CUBLAS_OP_N, CUBLAS_OP_N, res, res, res, alpha, Ophase, res, GPhase, res, beta, im_presum, res);
 
 
     }
+    thrust::device_vector<float> im(res * res);
+    im = thrust::reduce(im_presum.begin(), im_presum.end());
+
+    return 0;
+}
     
