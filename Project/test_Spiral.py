@@ -29,52 +29,52 @@ t_offset = 0.0
 # grid_res = (39,39, 1)
 # fov_z = Nslice * (sliceThick+sliceSpacing)
 
-# TODO: calc dcf for vds spiral
-import scipy.io
-g = scipy.io.loadmat('g.mat')
-gradients = g['g'] * 1e-2   # in T/m
-gradients = xp.array(gradients, dtype='float32')
-plt.plot(gradients[:200,0].get())
-plt.plot(gradients[:200,1].get())
-plt.xlabel('Time [*4e-6s]')
-plt.ylabel('Gradient Mag [T/m]')
-plt.show()
 
-# t = np.arange(0,gradients.shape[0]*Tres, Tres)
-
-k = scipy.io.loadmat('k.mat')
-temp = k['k']* 1e2   # in m-1
-kcoords = np.stack((np.real(temp), np.imag(temp)))
-kcoords = kcoords[...,:Npe*Nfreq]
-kcoords = kcoords.astype('float32')
-
-Tread = 0.494
-# t = np.linspace(0, Tread,Nfreq*Nfreq)
-# t = t.astype('float32')
-# tt = np.sqrt(t/Tread)
-# kx = Nfreq/2*tt*np.cos( 2*math.pi*Nfreq/2*tt)
-# kx =kx.astype('float32')
-# ky = Nfreq/2*tt*np.sin( 2*math.pi*Nfreq/2*tt)
-# ky =ky.astype('float32')
-#
-# #kx,ky = -ky,kx
-# ky = -ky
-# kx = xp.array(kx)
-# ky=xp.array(ky)
-# kcoords = xp.stack((kx,ky))
-# kcoords = kcoords[None, ...]
-# kcoords = sp.to_device(np.transpose(kcoords,(-1,0,1)), device)   #(npts, nslice,ndim)
-#
-# k=kx+1j*ky
-# g = 1/gammabar*(k-xp.concatenate((k[1:],xp.zeros(1,'complex64'))))/Tres;
-# gradients = np.stack((xp.real(g), xp.imag(g)), axis=-1)
-# plt.plot(np.real(g[:200].get()))
-# plt.plot(np.imag(g[:200].get()))
+# import scipy.io
+# g = scipy.io.loadmat('g.mat')
+# gradients = g['g'] * 1e-2   # in T/m
+# gradients = xp.array(gradients, dtype='float32')
+# plt.plot(gradients[:200,0].get())
+# plt.plot(gradients[:200,1].get())
 # plt.xlabel('Time [*4e-6s]')
 # plt.ylabel('Gradient Mag [T/m]')
 # plt.show()
 
-kcoords = sp.to_device(np.transpose(kcoords,(-1,1,0)), device)   #(npts, nslice,ndim)
+# t = np.arange(0,gradients.shape[0]*Tres, Tres)
+
+# k = scipy.io.loadmat('k.mat')
+# temp = k['k']* 1e2   # in m-1
+# kcoords = np.stack((np.real(temp), np.imag(temp)))
+# kcoords = kcoords[...,:Npe*Nfreq]
+# kcoords = kcoords.astype('float32')
+
+Tread = 0.494
+t = np.linspace(0, Tread,Nfreq*Nfreq)
+t = t.astype('float32')
+tt = np.sqrt(t/Tread)
+kx = Nfreq/2*tt*np.cos( 2*math.pi*Nfreq/2*tt)
+kx =kx.astype('float32')
+ky = Nfreq/2*tt*np.sin( 2*math.pi*Nfreq/2*tt)
+ky =ky.astype('float32')
+
+#kx,ky = -ky,kx
+ky = -ky
+kx = xp.array(kx)
+ky=xp.array(ky)
+kcoords = xp.stack((kx,ky))
+kcoords = kcoords[None, ...]
+kcoords = sp.to_device(np.transpose(kcoords,(-1,0,1)), device)   #(npts, nslice,ndim)
+
+k=kx+1j*ky
+g = 1/gammabar*(k-xp.concatenate((k[1:],xp.zeros(1,'complex64'))))/Tres;
+gradients = np.stack((xp.real(g), xp.imag(g)), axis=-1)
+plt.plot(np.real(g[:200].get()))
+plt.plot(np.imag(g[:200].get()))
+plt.xlabel('Time [*4e-6s]')
+plt.ylabel('Gradient Mag [T/m]')
+plt.show()
+
+#kcoords = sp.to_device(np.transpose(kcoords,(-1,1,0)), device)   #(npts, nslice,ndim)
 ones = xp.ones(kcoords.shape[:-1]+(1,))
 plt.figure(figsize=(5,5))
 plt.scatter(kcoords[:200,0,0].get(),kcoords[:200,0,1].get())
